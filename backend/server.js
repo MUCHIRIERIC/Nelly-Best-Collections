@@ -24,11 +24,9 @@ if (!fs.existsSync(uploadDir)) {
 app.use('/uploads', express.static(uploadDir));
 
 // --- MONGODB CONNECTION ---
-mongoose.connect(process.env.MONGO_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-}).then(() => console.log('✅ MongoDB Connected Successfully'))
-  .catch(err => console.error('❌ MongoDB Connection Error:', err));
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => console.log("Connected to MongoDB successfully"))
+  .catch((err) => console.error("❌ MongoDB Connection Error:", err));
 
 // --- SCHEMAS & MODELS ---
 const UserSchema = new mongoose.Schema({
