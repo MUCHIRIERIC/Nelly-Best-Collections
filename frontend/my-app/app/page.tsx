@@ -3,6 +3,9 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Search, ShoppingCart, User, Menu, X, MessageCircle, Upload, Plus, Package, Settings, LogOut } from 'lucide-react';
 
+// --- API CONFIGURATION ---
+const API_BASE_URL = 'https://nelly-best-collections-4.onrender.com';
+
 // --- CATEGORIES DATA ---
 const CATEGORIES: Record<string, string[]> = {
   "Male Clothes": ["Boxers", "Vests", "Soccer Shorts", "Ankle Socks"],
@@ -21,7 +24,7 @@ const FALLBACK_PRODUCTS = [
 // Helper to format image URLs from the backend
 const getImageUrl = (url: string) => {
   if (!url) return "";
-  return url.startsWith('/uploads') ? `http://localhost:5000${url}` : url;
+  return url.startsWith('/uploads') ? `${API_BASE_URL}${url}` : url;
 };
 
 export default function NellyBestCollections() {
@@ -58,7 +61,7 @@ export default function NellyBestCollections() {
 
     const fetchProducts = async () => {
       try {
-        const res = await fetch('http://localhost:5000/api/products');
+        const res = await fetch(`${API_BASE_URL}/api/products`);
         if (res.ok) {
           const data = await res.json();
           setProducts(data.length > 0 ? data : FALLBACK_PRODUCTS);
@@ -77,7 +80,7 @@ export default function NellyBestCollections() {
 
     const fetchSettings = async () => {
       try {
-        const res = await fetch('http://localhost:5000/api/settings');
+        const res = await fetch(`${API_BASE_URL}/api/settings`);
         if (res.ok) {
           const data = await res.json();
           if (data && data.tagline) setTagline(data.tagline);
@@ -120,7 +123,7 @@ export default function NellyBestCollections() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch('http://localhost:5000/api/login', {
+      const res = await fetch(`${API_BASE_URL}/api/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password })
@@ -163,7 +166,7 @@ export default function NellyBestCollections() {
     }
 
     try {
-      const res = await fetch('http://localhost:5000/api/products', {
+      const res = await fetch(`${API_BASE_URL}/api/products`, {
         method: 'POST',
         headers: {
           ...(token ? { 'Authorization': `Bearer ${token}` } : {})
@@ -174,7 +177,7 @@ export default function NellyBestCollections() {
         alert("Product added successfully!");
         setNewProduct({ name: "", price: "", category: "Male Clothes", subCategory: "Boxers" });
         setNewProductFile(null);
-        const updated = await fetch('http://localhost:5000/api/products').then(r => r.json());
+        const updated = await fetch(`${API_BASE_URL}/api/products`).then(r => r.json());
         setProducts(updated);
       } else {
         const err = await res.json();
@@ -188,7 +191,7 @@ export default function NellyBestCollections() {
   const handleUpdateSettings = async () => {
     const token = localStorage.getItem('adminToken');
     try {
-      const res = await fetch('http://localhost:5000/api/settings', {
+      const res = await fetch(`${API_BASE_URL}/api/settings`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -209,7 +212,7 @@ export default function NellyBestCollections() {
   const handleWeeklyDealUpdate = async () => {
     const token = localStorage.getItem('adminToken');
     try {
-      const res = await fetch('http://localhost:5000/api/weekly-deal', {
+      const res = await fetch(`${API_BASE_URL}/api/weekly-deal`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -219,7 +222,7 @@ export default function NellyBestCollections() {
       });
       if (res.ok) {
         alert("Weekly deal updated successfully!");
-        const updated = await fetch('http://localhost:5000/api/products').then(r => r.json());
+        const updated = await fetch(`${API_BASE_URL}/api/products`).then(r => r.json());
         setProducts(updated);
       } else {
         alert("Failed to update weekly deal");
