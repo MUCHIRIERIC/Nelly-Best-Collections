@@ -6,6 +6,13 @@ import { Search, ShoppingCart, User, Menu, X, MessageCircle, Upload, Plus, Packa
 // --- API CONFIGURATION ---
 const API_BASE_URL = 'https://nelly-best-collections-4.onrender.com';
 
+// --- ADMIN CONFIGURATION ---
+const ADMIN_EMAILS = [
+  "muchirimunene031@gmail.com",
+  "ericnelly53@gmail.com",
+  "muthoninellian@gmail.com"
+];
+
 // --- CATEGORIES DATA ---
 const CATEGORIES: Record<string, string[]> = {
   "Male Clothes": ["Boxers", "Vests", "Soccer Shorts", "Ankle Socks"],
@@ -40,7 +47,6 @@ export default function NellieBestCollections() {
   
   // --- AUTH STATE ---
   const [showLogin, setShowLogin] = useState(false);
-  const [authTab, setAuthTab] = useState<'client' | 'admin'>('client');
   const [isSignUp, setIsSignUp] = useState(false);
   
   const [isAdmin, setIsAdmin] = useState(false);
@@ -142,16 +148,21 @@ export default function NellieBestCollections() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (authTab === 'admin') {
+    const normalizedEmail = email.trim().toLowerCase();
+    const isUserAdmin = ADMIN_EMAILS.includes(normalizedEmail);
+    
+    if (isUserAdmin) {
+      // Admin Login
       try {
         const res = await fetch(`${API_BASE_URL}/api/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password })
+          body: JSON.stringify({ email: normalizedEmail, password })
         });
         const data = await res.json();
         if (res.ok) {
           setIsAdmin(true);
+          setIsClient(false);
           setShowLogin(false);
           localStorage.setItem('adminToken', data.token);
           setEmail("");
@@ -165,12 +176,13 @@ export default function NellieBestCollections() {
     } else {
       // Mock Client Login / Sign Up Process
       setIsClient(true);
-      const displayName = clientNameInput || email.split('@')[0];
+      setIsAdmin(false);
+      const displayName = clientNameInput || normalizedEmail.split('@')[0];
       setClientName(displayName);
       setShowLogin(false);
       localStorage.setItem('clientToken', 'mock-client-token');
       localStorage.setItem('clientName', displayName);
-      setCurrentView('client-dashboard');
+      setCurrentView('catalog'); // Route client to catalog view
       setEmail("");
       setPassword("");
       setClientNameInput("");
@@ -193,7 +205,6 @@ export default function NellieBestCollections() {
   // --- CART HANDLERS ---
   const addToCart = (product: any) => {
     setCart([...cart, product]);
-    // The cart icon will update, but we no longer force the cart panel to open.
   };
 
   const removeFromCart = (indexToRemove: number) => {
@@ -240,11 +251,11 @@ export default function NellieBestCollections() {
         throw new Error("Backend save failed. Utilizing local image.");
       }
     } catch (error) {
-      // Fallback: Add locally if backend fails, allowing local PC images to work instantly
+      // Fallback: Add locally if backend fails
       const newMockProduct = {
         id: `local-${Date.now()}`,
         ...newProduct,
-        image: imagePreview || "" // Use local Blob URL
+        image: imagePreview || "" 
       };
       setProducts([newMockProduct, ...products]);
       setNewProduct({ name: "", price: "", category: "Male Clothes", subCategory: "Boxers" });
@@ -546,7 +557,7 @@ export default function NellieBestCollections() {
                           if (e.target.files && e.target.files[0]) {
                             const file = e.target.files[0];
                             setNewProductFile(file);
-                            setImagePreview(URL.createObjectURL(file)); // Generate local preview
+                            setImagePreview(URL.createObjectURL(file)); 
                           }
                         }}
                         className="w-full text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-pink-50 file:text-pink-700 hover:file:bg-pink-100"
@@ -884,7 +895,7 @@ export default function NellieBestCollections() {
         </div>
       </footer>
 
-      {/* AUTHENTICATION MODAL (CLIENT & ADMIN SEPARATED) */}
+      {/* UNIFIED AUTHENTICATION MODAL */}
       {showLogin && (
         <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden relative shadow-2xl">
@@ -892,29 +903,13 @@ export default function NellieBestCollections() {
               <X size={24} />
             </button>
             
-            {/* Auth Tabs */}
-            <div className="flex border-b text-center font-semibold bg-gray-50">
-              <button 
-                onClick={() => setAuthTab('client')} 
-                className={`flex-1 py-4 transition-colors ${authTab === 'client' ? 'text-pink-600 bg-white border-b-2 border-pink-600' : 'text-gray-500 hover:bg-gray-100'}`}
-              >
-                Client Zone
-              </button>
-              <button 
-                onClick={() => setAuthTab('admin')} 
-                className={`flex-1 py-4 transition-colors ${authTab === 'admin' ? 'text-pink-600 bg-white border-b-2 border-pink-600' : 'text-gray-500 hover:bg-gray-100'}`}
-              >
-                Admin Access
-              </button>
-            </div>
-
             <div className="p-6">
               <h2 className="text-2xl font-bold text-center mb-6">
-                {authTab === 'admin' ? 'Admin Gateway' : isSignUp ? 'Create an Account' : 'Welcome Back'}
+                {isSignUp ? 'Create an Account' : 'Welcome Back'}
               </h2>
               
               <form onSubmit={handleLogin} className="space-y-4">
-                {authTab === 'client' && isSignUp && (
+                {isSignUp && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
                     <input 
@@ -923,7 +918,7 @@ export default function NellieBestCollections() {
                       onChange={(e) => setClientNameInput(e.target.value)}
                       className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-pink-500 outline-none bg-gray-50"
                       placeholder="Enter your name"
-                      required
+                      required={isSignUp && !ADMIN_EMAILS.includes(email.trim().toLowerCase())} 
                     />
                   </div>
                 )}
@@ -951,20 +946,18 @@ export default function NellieBestCollections() {
                   />
                 </div>
                 <button type="submit" className="w-full bg-pink-600 text-white py-2 rounded-lg font-semibold hover:bg-pink-700 transition mt-2 shadow-md">
-                  {authTab === 'admin' ? 'Access Dashboard' : isSignUp ? 'Sign Up & Continue' : 'Login'}
+                  {isSignUp ? 'Sign Up & Continue' : 'Login'}
                 </button>
               </form>
 
-              {authTab === 'client' && (
-                <div className="mt-4 text-center text-sm">
-                  <span className="text-gray-600">
-                    {isSignUp ? "Already have an account?" : "Don't have an account?"}
-                  </span>
-                  <button onClick={() => setIsSignUp(!isSignUp)} className="ml-1 text-pink-600 font-bold hover:underline">
-                    {isSignUp ? "Login here" : "Sign up"}
-                  </button>
-                </div>
-              )}
+              <div className="mt-4 text-center text-sm">
+                <span className="text-gray-600">
+                  {isSignUp ? "Already have an account?" : "Don't have an account?"}
+                </span>
+                <button onClick={() => setIsSignUp(!isSignUp)} className="ml-1 text-pink-600 font-bold hover:underline">
+                  {isSignUp ? "Login here" : "Sign up"}
+                </button>
+              </div>
             </div>
           </div>
         </div>
