@@ -890,7 +890,7 @@ export default function NellieBestCollections() {
       {/* WHATSAPP FLOATING BUTTON */}
       {!isCartOpen && (
         <a 
-          href="https://wa.me/254768450250" 
+          href="https://wa.me/254746956162" 
           target="_blank" 
           rel="noreferrer"
           className="fixed bottom-6 right-6 bg-green-500 text-white p-4 rounded-full shadow-[0_4px_14px_rgba(34,197,94,0.5)] hover:scale-110 transition-transform z-40 flex items-center justify-center"
@@ -918,8 +918,8 @@ export default function NellieBestCollections() {
           <div>
             <h3 className="text-white text-lg font-bold mb-4">Contact Us</h3>
             <ul className="space-y-2 text-sm">
-              <li>📞 Phone: +254 768 450250</li>
-              <li>✉️ Email: muchirimunene031@gmail.com</li>
+              <li>📞 Phone: +254 768 450250 / +254746956162</li>
+              <li>✉️ Email: muthoninellian@gmail.com</li>
               <li>📍 Location: Mwea, Kenya</li>
             </ul>
           </div>
