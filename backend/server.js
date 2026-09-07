@@ -4,8 +4,8 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
+const cloudinary = require('cloudinary').v2;
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
 require('dotenv').config();
 
 const app = express();
@@ -15,13 +15,22 @@ const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
-// Create uploads directory if it doesn't exist
-const uploadDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir);
-}
-// Serve static images from the uploads folder
-app.use('/uploads', express.static(uploadDir));
+// --- CLOUDINARY CONFIGURATION ---
+// Add these to your .env file on your hosting platform
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET
+});
+
+const storage = new CloudinaryStorage({
+    cloudinary: cloudinary,
+    params: {
+        folder: 'nellybest_collections',
+        allowedFormats: ['jpg', 'png', 'jpeg', 'webp'],
+    },
+});
+const upload = multer({ storage: storage });
 
 // --- MONGODB CONNECTION ---
 mongoose.connect(process.env.MONGO_URI)
@@ -30,9 +39,10 @@ mongoose.connect(process.env.MONGO_URI)
 
 // --- SCHEMAS & MODELS ---
 const UserSchema = new mongoose.Schema({
+    name: { type: String, required: false },
     email: { type: String, required: true, unique: true },
     password: { type: String, required: true },
-    isAdmin: { type: Boolean, default: true }
+    isAdmin: { type: Boolean, default: false }
 });
 const User = mongoose.model('User', UserSchema);
 
@@ -52,36 +62,28 @@ const SettingsSchema = new mongoose.Schema({
 });
 const Settings = mongoose.model('Settings', SettingsSchema);
 
-// --- MULTER CONFIGURATION FOR IMAGE UPLOADS ---
-const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        cb(null, 'uploads/');
-    },
-    filename: function (req, file, cb) {
-        cb(null, 'nellybest-' + Date.now() + path.extname(file.originalname));
-    }
-});
-const upload = multer({ storage: storage });
+// --- ADMIN CONFIGURATION & SEEDING ---
+const ADMIN_EMAILS = [
+    "muchirimunene031@gmail.com",
+    "ericnelly53@gmail.com",
+    "muthoninellian@gmail.com"
+];
 
-// --- SEED ADMIN USER ---
-const seedAdmin = async () => {
-    const adminEmail = "muchirimunene031@gmail.com";
-    const adminPassword = "31022663m";
-    
-    const existingAdmin = await User.findOne({ email: adminEmail });
-    if (!existingAdmin) {
-        const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(adminPassword, salt);
-        await User.create({ email: adminEmail, password: hashedPassword, isAdmin: true });
-        console.log("✅ Admin user seeded successfully.");
+const seedAdmins = async () => {
+    for (const email of ADMIN_EMAILS) {
+        const existingAdmin = await User.findOne({ email });
+        if (!existingAdmin) {
+            const salt = await bcrypt.genSalt(10);
+            const hashedPassword = await bcrypt.hash("Admin@123", salt); // Default password for new admins
+            await User.create({ email, password: hashedPassword, isAdmin: true });
+            console.log(`✅ Admin seeded: ${email}`);
+        }
     }
     
     const settings = await Settings.findOne();
-    if (!settings) {
-        await Settings.create({});
-    }
+    if (!settings) await Settings.create({});
 };
-seedAdmin();
+seedAdmins();
 
 // --- AUTH MIDDLEWARE ---
 const protect = (req, res, next) => {
@@ -99,14 +101,39 @@ const protect = (req, res, next) => {
 
 // --- API ROUTES ---
 
-// 1. Admin Login
+// 1. Unified Register (Handles both Admin detection and Clients)
+app.post('/api/register', async (req, res) => {
+    const { name, email, password } = req.body;
+    try {
+        const userExists = await User.findOne({ email });
+        if (userExists) return res.status(400).json({ message: 'User already exists' });
+
+        const isAdmin = ADMIN_EMAILS.includes(email.toLowerCase());
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(password, salt);
+
+        const user = await User.create({
+            name,
+            email,
+            password: hashedPassword,
+            isAdmin
+        });
+
+        const token = jwt.sign({ id: user._id, isAdmin: user.isAdmin }, process.env.JWT_SECRET, { expiresIn: '30d' });
+        res.status(201).json({ token, email: user.email, name: user.name, isAdmin: user.isAdmin });
+    } catch (error) {
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// 2. Unified Login
 app.post('/api/login', async (req, res) => {
     const { email, password } = req.body;
     try {
         const user = await User.findOne({ email });
         if (user && (await bcrypt.compare(password, user.password))) {
             const token = jwt.sign({ id: user._id, isAdmin: user.isAdmin }, process.env.JWT_SECRET, { expiresIn: '30d' });
-            res.json({ token, email: user.email, isAdmin: user.isAdmin });
+            res.json({ token, email: user.email, name: user.name, isAdmin: user.isAdmin });
         } else {
             res.status(401).json({ message: 'Invalid credentials' });
         }
@@ -115,32 +142,26 @@ app.post('/api/login', async (req, res) => {
     }
 });
 
-// 2. Get All Products
+// 3. Get All Products
 app.get('/api/products', async (req, res) => {
     try {
-        const products = await Product.find({});
+        const products = await Product.find({}).sort({ _id: -1 });
         res.json(products);
     } catch (error) {
         res.status(500).json({ message: 'Failed to fetch products' });
     }
 });
 
-// 3. Add New Product (Admin Only, Supports Image Upload)
+// 4. Add New Product (Admin Only, Cloudinary Upload)
 app.post('/api/products', protect, upload.single('image'), async (req, res) => {
     try {
+        if (!req.user.isAdmin) return res.status(403).json({ message: 'Admin access required' });
+
         const { name, category, subCategory, price } = req.body;
-        
-        // Use local file path if uploaded, otherwise expect a URL in req.body
-        const imageUrl = req.file ? `/uploads/${req.file.filename}` : req.body.image;
+        // Cloudinary returns the secure URL in req.file.path
+        const imageUrl = req.file ? req.file.path : req.body.image;
 
-        const product = new Product({
-            name,
-            category,
-            subCategory,
-            price,
-            image: imageUrl
-        });
-
+        const product = new Product({ name, category, subCategory, price, image: imageUrl });
         const savedProduct = await product.save();
         res.status(201).json(savedProduct);
     } catch (error) {
@@ -148,16 +169,43 @@ app.post('/api/products', protect, upload.single('image'), async (req, res) => {
     }
 });
 
-// 4. Set Item of the Week (Admin Only)
-app.put('/api/products/weekly-deal/:id', protect, async (req, res) => {
+// 5. Update Product (Admin Only) - Aligns with page_2.tsx handleSaveEdit
+app.put('/api/products/:id', protect, async (req, res) => {
     try {
-        // Reset all products to not be the weekly deal
+        if (!req.user.isAdmin) return res.status(403).json({ message: 'Admin access required' });
+        
+        const updatedProduct = await Product.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        res.json(updatedProduct);
+    } catch (error) {
+        res.status(500).json({ message: 'Failed to update product' });
+    }
+});
+
+// 6. Delete Product (Admin Only) - Aligns with page_2.tsx handleDeleteProduct
+app.delete('/api/products/:id', protect, async (req, res) => {
+    try {
+        if (!req.user.isAdmin) return res.status(403).json({ message: 'Admin access required' });
+
+        await Product.findByIdAndDelete(req.params.id);
+        res.json({ message: 'Product deleted successfully' });
+    } catch (error) {
+        res.status(500).json({ message: 'Failed to delete product' });
+    }
+});
+
+// 7. Set Weekly Deal (Admin Only) - Aligns with page_2.tsx handleWeeklyDealUpdate
+app.put('/api/weekly-deal', protect, async (req, res) => {
+    try {
+        if (!req.user.isAdmin) return res.status(403).json({ message: 'Admin access required' });
+
+        const { productId, weeklyGiftDescription } = req.body;
+        
+        // Reset previous deals
         await Product.updateMany({}, { isWeeklyDeal: false, weeklyGiftDescription: "" });
         
-        // Set the new weekly deal
-        const { weeklyGiftDescription } = req.body;
+        // Apply new deal
         const updatedProduct = await Product.findByIdAndUpdate(
-            req.params.id, 
+            productId, 
             { isWeeklyDeal: true, weeklyGiftDescription }, 
             { new: true }
         );
@@ -167,19 +215,25 @@ app.put('/api/products/weekly-deal/:id', protect, async (req, res) => {
     }
 });
 
-// 5. Get Tagline Settings
+// 8. Get Tagline Settings
 app.get('/api/settings', async (req, res) => {
     const settings = await Settings.findOne();
     res.json(settings);
 });
 
-// 6. Update Tagline (Admin Only)
+// 9. Update Tagline (Admin Only)
 app.put('/api/settings', protect, async (req, res) => {
-    const { tagline } = req.body;
-    let settings = await Settings.findOne();
-    settings.tagline = tagline;
-    await settings.save();
-    res.json(settings);
+    try {
+        if (!req.user.isAdmin) return res.status(403).json({ message: 'Admin access required' });
+
+        const { tagline } = req.body;
+        let settings = await Settings.findOne();
+        settings.tagline = tagline;
+        await settings.save();
+        res.json(settings);
+    } catch (error) {
+        res.status(500).json({ message: 'Failed to update settings' });
+    }
 });
 
 // --- START SERVER ---
