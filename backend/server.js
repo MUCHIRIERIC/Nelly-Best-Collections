@@ -4,8 +4,8 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const multer = require('multer');
-const cloudinary = require('cloudinary').v2;
-const { CloudinaryStorage } = require('multer-storage-cloudinary');
+const path = require('path');
+const fs = require('fs');
 require('dotenv').config();
 
 const app = express();
@@ -15,20 +15,26 @@ const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
-// --- CLOUDINARY CONFIGURATION ---
-// Add these to your .env file on your hosting platform
-cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-    api_key: process.env.CLOUDINARY_API_KEY,
-    api_secret: process.env.CLOUDINARY_API_SECRET
-});
+// --- LOCAL STORAGE CONFIGURATION ---
+// 1. Ensure the uploads directory exists
+const uploadDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+}
 
-const storage = new CloudinaryStorage({
-    cloudinary: cloudinary,
-    params: {
-        folder: 'nellybest_collections',
-        allowedFormats: ['jpg', 'png', 'jpeg', 'webp'],
+// 2. Serve the uploads directory statically so the frontend can view the images
+app.use('/uploads', express.static(uploadDir));
+
+// 3. Configure Multer to save files locally
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        cb(null, 'uploads/');
     },
+    filename: function (req, file, cb) {
+        // Creates a unique filename (e.g., 1675203940123-image.jpg)
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        cb(null, uniqueSuffix + path.extname(file.originalname)); 
+    }
 });
 const upload = multer({ storage: storage });
 
@@ -152,14 +158,15 @@ app.get('/api/products', async (req, res) => {
     }
 });
 
-// 4. Add New Product (Admin Only, Cloudinary Upload)
+// 4. Add New Product (Admin Only, Local Upload)
 app.post('/api/products', protect, upload.single('image'), async (req, res) => {
     try {
         if (!req.user.isAdmin) return res.status(403).json({ message: 'Admin access required' });
 
         const { name, category, subCategory, price } = req.body;
-        // Cloudinary returns the secure URL in req.file.path
-        const imageUrl = req.file ? req.file.path : req.body.image;
+        
+        // Construct the local URL to the saved file
+        const imageUrl = req.file ? `/uploads/${req.file.filename}` : req.body.image;
 
         const product = new Product({ name, category, subCategory, price, image: imageUrl });
         const savedProduct = await product.save();
@@ -169,7 +176,7 @@ app.post('/api/products', protect, upload.single('image'), async (req, res) => {
     }
 });
 
-// 5. Update Product (Admin Only) - Aligns with page_2.tsx handleSaveEdit
+// 5. Update Product (Admin Only)
 app.put('/api/products/:id', protect, async (req, res) => {
     try {
         if (!req.user.isAdmin) return res.status(403).json({ message: 'Admin access required' });
@@ -181,7 +188,7 @@ app.put('/api/products/:id', protect, async (req, res) => {
     }
 });
 
-// 6. Delete Product (Admin Only) - Aligns with page_2.tsx handleDeleteProduct
+// 6. Delete Product (Admin Only)
 app.delete('/api/products/:id', protect, async (req, res) => {
     try {
         if (!req.user.isAdmin) return res.status(403).json({ message: 'Admin access required' });
@@ -193,7 +200,7 @@ app.delete('/api/products/:id', protect, async (req, res) => {
     }
 });
 
-// 7. Set Weekly Deal (Admin Only) - Aligns with page_2.tsx handleWeeklyDealUpdate
+// 7. Set Weekly Deal (Admin Only)
 app.put('/api/weekly-deal', protect, async (req, res) => {
     try {
         if (!req.user.isAdmin) return res.status(403).json({ message: 'Admin access required' });
