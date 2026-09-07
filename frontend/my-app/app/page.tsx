@@ -215,7 +215,7 @@ export default function NellieBestCollections() {
   const handleWhatsAppCheckout = () => {
     if (cart.length === 0) return;
     const message = `Hello Nellie Best Collections! I would like to order:\n\n${cart.map((item, i) => `${i+1}. ${item.name} - Ksh ${item.price}`).join('\n')}\n\n*Total Items:* ${cart.length}\n*Total Price:* Ksh ${cartTotal}\n\nPlease guide me on the payment and delivery.`;
-    window.open(`https://wa.me/254768450250?text=${encodeURIComponent(message)}`, '_blank');
+    window.open(`https://wa.me/254746956162?text=${encodeURIComponent(message)}`, '_blank');
   };
 
   // --- ADMIN ACTIONS ---
