@@ -58,11 +58,10 @@ export default function NellieBestCollections() {
   const [clientNameInput, setClientNameInput] = useState("");
 
   // --- ADMIN FORM STATES ---
-  const [newProduct, setNewProduct] = useState({ name: "", price: "", category: "Male Clothes", subCategory: "Boxers" });
-  const [newProductFile, setNewProductFile] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null); // Local image preview
+  const [newProduct, setNewProduct] = useState({ name: "", price: "", category: "Male Clothes", subCategory: "Boxers", imageUrl: "" });
   const [weeklyDealId, setWeeklyDealId] = useState("");
   const [weeklyGift, setWeeklyGift] = useState("");
+  const [adminTab, setAdminTab] = useState<'dashboard' | 'inventory'>('dashboard');
   
   // Edit Product States
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -223,28 +222,27 @@ export default function NellieBestCollections() {
   const handleAddProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     const token = localStorage.getItem('adminToken');
-    const formData = new FormData();
-    formData.append('name', newProduct.name);
-    formData.append('price', newProduct.price);
-    formData.append('category', newProduct.category);
-    formData.append('subCategory', newProduct.subCategory);
-    if (newProductFile) {
-      formData.append('image', newProductFile);
-    }
+    
+    const payload = {
+      name: newProduct.name,
+      price: newProduct.price,
+      category: newProduct.category,
+      subCategory: newProduct.subCategory,
+      image: newProduct.imageUrl
+    };
 
     try {
       const res = await fetch(`${API_BASE_URL}/api/products`, {
         method: 'POST',
         headers: {
+          'Content-Type': 'application/json',
           ...(token ? { 'Authorization': `Bearer ${token}` } : {})
         },
-        body: formData
+        body: JSON.stringify(payload)
       });
       if (res.ok) {
         alert("Product added successfully!");
-        setNewProduct({ name: "", price: "", category: "Male Clothes", subCategory: "Boxers" });
-        setNewProductFile(null);
-        setImagePreview(null);
+        setNewProduct({ name: "", price: "", category: "Male Clothes", subCategory: "Boxers", imageUrl: "" });
         const updated = await fetch(`${API_BASE_URL}/api/products`).then(r => r.json());
         setProducts(updated);
       } else {
@@ -255,12 +253,10 @@ export default function NellieBestCollections() {
       const newMockProduct = {
         id: `local-${Date.now()}`,
         ...newProduct,
-        image: imagePreview || "" 
+        image: newProduct.imageUrl 
       };
       setProducts([newMockProduct, ...products]);
-      setNewProduct({ name: "", price: "", category: "Male Clothes", subCategory: "Boxers" });
-      setNewProductFile(null);
-      setImagePreview(null);
+      setNewProduct({ name: "", price: "", category: "Male Clothes", subCategory: "Boxers", imageUrl: "" });
       alert("Product loaded locally for current session!");
     }
   };
@@ -506,175 +502,213 @@ export default function NellieBestCollections() {
         {/* MAIN CONTENT AREA */}
         <main className={`flex-1 w-full ${!isAdmin && currentView === 'catalog' ? 'lg:w-[calc(100%-16rem)]' : ''}`}>
           {isAdmin ? (
-            <div className="p-6 bg-pink-50 min-h-screen">
-              <h2 className="text-2xl font-bold mb-6 flex items-center gap-2"><Settings /> Admin Dashboard</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                
-                {/* Add Product Form */}
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-                  <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><Plus /> Add New Product</h3>
-                  <form onSubmit={handleAddProduct} className="space-y-3">
-                    <input 
-                      type="text" 
-                      placeholder="Product Name" 
-                      value={newProduct.name}
-                      onChange={(e) => setNewProduct({...newProduct, name: e.target.value})}
-                      className="w-full p-2 border rounded text-sm outline-none focus:border-pink-500" 
-                      required
-                    />
-                    <input 
-                      type="number" 
-                      placeholder="Price (Ksh)" 
-                      value={newProduct.price}
-                      onChange={(e) => setNewProduct({...newProduct, price: e.target.value})}
-                      className="w-full p-2 border rounded text-sm outline-none focus:border-pink-500" 
-                      required
-                    />
-                    <select 
-                      value={newProduct.category}
-                      onChange={(e) => {
-                        const cat = e.target.value;
-                        const subcats = CATEGORIES[cat] || [];
-                        setNewProduct({...newProduct, category: cat, subCategory: subcats[0] || ""});
-                      }}
-                      className="w-full p-2 border rounded text-sm outline-none focus:border-pink-500"
-                    >
-                      {Object.keys(CATEGORIES).map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                    <select 
-                      value={newProduct.subCategory}
-                      onChange={(e) => setNewProduct({...newProduct, subCategory: e.target.value})}
-                      className="w-full p-2 border rounded text-sm outline-none focus:border-pink-500"
-                    >
-                      {(CATEGORIES[newProduct.category] || []).map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">Upload Product Image (Local or Server)</label>
-                      <input 
-                        type="file" 
-                        accept="image/*"
-                        onChange={(e) => {
-                          if (e.target.files && e.target.files[0]) {
-                            const file = e.target.files[0];
-                            setNewProductFile(file);
-                            setImagePreview(URL.createObjectURL(file)); 
-                          }
-                        }}
-                        className="w-full text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-pink-50 file:text-pink-700 hover:file:bg-pink-100"
-                      />
-                      {imagePreview && (
-                        <div className="mt-2 text-center">
-                          <span className="text-[10px] text-gray-400 block mb-1">Image Preview</span>
-                          <img src={imagePreview} alt="Preview" className="h-24 mx-auto object-contain rounded border shadow-sm" />
+            <div className="flex flex-col md:flex-row min-h-screen bg-pink-50">
+              
+              {/* Navigation Panel 1: Sidebar */}
+              <aside className="w-full md:w-64 bg-white border-r border-gray-200 shadow-sm p-6 flex flex-col gap-3">
+                <h2 className="text-2xl font-bold mb-6 flex items-center gap-2 text-gray-800"><Settings /> Admin</h2>
+                <button 
+                  onClick={() => setAdminTab('dashboard')} 
+                  className={`w-full text-left px-4 py-3 rounded-xl font-bold transition-all ${adminTab === 'dashboard' ? 'bg-pink-600 text-white shadow-md' : 'text-gray-600 hover:bg-pink-50'}`}
+                >
+                  Dashboard Overview
+                </button>
+                <button 
+                  onClick={() => setAdminTab('inventory')} 
+                  className={`w-full text-left px-4 py-3 rounded-xl font-bold transition-all ${adminTab === 'inventory' ? 'bg-pink-600 text-white shadow-md' : 'text-gray-600 hover:bg-pink-50'}`}
+                >
+                  Manage Inventory
+                </button>
+              </aside>
+
+              <div className="flex-1 p-6 flex flex-col">
+                {/* Navigation Panel 2: Top Bar */}
+                <div className="flex space-x-2 border-b border-gray-200 mb-6 pb-2">
+                   <button 
+                     onClick={() => setAdminTab('dashboard')}
+                     className={`px-6 py-2 rounded-full font-semibold transition-all ${adminTab === 'dashboard' ? 'bg-pink-100 text-pink-700 border border-pink-200' : 'text-gray-500 hover:text-pink-600 hover:bg-gray-100'}`}
+                   >
+                     Overview & Products
+                   </button>
+                   <button 
+                     onClick={() => setAdminTab('inventory')}
+                     className={`px-6 py-2 rounded-full font-semibold transition-all ${adminTab === 'inventory' ? 'bg-pink-100 text-pink-700 border border-pink-200' : 'text-gray-500 hover:text-pink-600 hover:bg-gray-100'}`}
+                   >
+                     Database & Stock
+                   </button>
+                </div>
+
+                {adminTab === 'dashboard' && (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {/* Add Product Form */}
+                    <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                      <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><Plus /> Add New Product</h3>
+                      <form onSubmit={handleAddProduct} className="space-y-3">
+                        <input 
+                          type="text" 
+                          placeholder="Product Name" 
+                          value={newProduct.name}
+                          onChange={(e) => setNewProduct({...newProduct, name: e.target.value})}
+                          className="w-full p-2 border rounded text-sm outline-none focus:border-pink-500" 
+                          required
+                        />
+                        <input 
+                          type="number" 
+                          placeholder="Price (Ksh)" 
+                          value={newProduct.price}
+                          onChange={(e) => setNewProduct({...newProduct, price: e.target.value})}
+                          className="w-full p-2 border rounded text-sm outline-none focus:border-pink-500" 
+                          required
+                        />
+                        <select 
+                          value={newProduct.category}
+                          onChange={(e) => {
+                            const cat = e.target.value;
+                            const subcats = CATEGORIES[cat] || [];
+                            setNewProduct({...newProduct, category: cat, subCategory: subcats[0] || ""});
+                          }}
+                          className="w-full p-2 border rounded text-sm outline-none focus:border-pink-500"
+                        >
+                          {Object.keys(CATEGORIES).map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                        <select 
+                          value={newProduct.subCategory}
+                          onChange={(e) => setNewProduct({...newProduct, subCategory: e.target.value})}
+                          className="w-full p-2 border rounded text-sm outline-none focus:border-pink-500"
+                        >
+                          {(CATEGORIES[newProduct.category] || []).map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Product Image URL</label>
+                          <input 
+                            type="text" 
+                            placeholder="https://example.com/image.jpg"
+                            value={newProduct.imageUrl}
+                            onChange={(e) => setNewProduct({...newProduct, imageUrl: e.target.value})}
+                            className="w-full p-2 border rounded text-sm outline-none focus:border-pink-500"
+                            required
+                          />
+                          {newProduct.imageUrl && (
+                            <div className="mt-2 text-center">
+                              <span className="text-[10px] text-gray-400 block mb-1">Image Preview</span>
+                              <img 
+                                src={newProduct.imageUrl} 
+                                alt="Preview" 
+                                className="h-24 mx-auto object-contain rounded border shadow-sm" 
+                                onError={(e) => e.currentTarget.style.display = 'none'} 
+                                onLoad={(e) => e.currentTarget.style.display = 'block'} 
+                              />
+                            </div>
+                          )}
                         </div>
-                      )}
+                        <button type="submit" className="w-full bg-pink-600 text-white p-2 rounded text-sm font-semibold hover:bg-pink-700">Save Item</button>
+                      </form>
                     </div>
-                    <button type="submit" className="w-full bg-pink-600 text-white p-2 rounded text-sm font-semibold hover:bg-pink-700">Save Item</button>
-                  </form>
-                </div>
 
-                {/* Recent Orders */}
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-                  <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><Package /> Recent Orders</h3>
-                  <p className="text-gray-500 text-sm">Orders are securely managed via direct WhatsApp checkout. The client dashboard only contains client-facing features.</p>
-                </div>
+                    {/* Recent Orders */}
+                    <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                      <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><Package /> Recent Orders</h3>
+                      <p className="text-gray-500 text-sm">Orders are securely managed via direct WhatsApp checkout. The client dashboard only contains client-facing features.</p>
+                    </div>
 
-                {/* Item of the Week Admin */}
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-pink-300 shadow-[0_0_15px_rgba(236,72,153,0.3)]">
-                  <h3 className="font-bold text-lg mb-4 text-pink-600">Set Item of the Week</h3>
-                  <select 
-                    value={weeklyDealId}
-                    onChange={(e) => setWeeklyDealId(e.target.value)}
-                    className="w-full p-2 border rounded mb-3 text-sm outline-none focus:border-pink-500"
-                  >
-                    {products.map(p => <option key={p._id || p.id} value={p._id || p.id}>{p.name}</option>)}
-                  </select>
-                  <input 
-                    type="text" 
-                    placeholder="Free Gift Description (e.g. Free Socks)" 
-                    value={weeklyGift}
-                    onChange={(e) => setWeeklyGift(e.target.value)}
-                    className="w-full p-2 border rounded mb-3 text-sm outline-none focus:border-pink-500"
-                  />
-                  <button onClick={handleWeeklyDealUpdate} className="w-full bg-pink-600 text-white p-2 rounded text-sm font-semibold hover:bg-pink-700">Update Weekly Deal</button>
-                </div>
+                    {/* Item of the Week Admin */}
+                    <div className="bg-white p-6 rounded-xl shadow-sm border border-pink-300 shadow-[0_0_15px_rgba(236,72,153,0.3)]">
+                      <h3 className="font-bold text-lg mb-4 text-pink-600">Set Item of the Week</h3>
+                      <select 
+                        value={weeklyDealId}
+                        onChange={(e) => setWeeklyDealId(e.target.value)}
+                        className="w-full p-2 border rounded mb-3 text-sm outline-none focus:border-pink-500"
+                      >
+                        {products.map(p => <option key={p._id || p.id} value={p._id || p.id}>{p.name}</option>)}
+                      </select>
+                      <input 
+                        type="text" 
+                        placeholder="Free Gift Description (e.g. Free Socks)" 
+                        value={weeklyGift}
+                        onChange={(e) => setWeeklyGift(e.target.value)}
+                        className="w-full p-2 border rounded mb-3 text-sm outline-none focus:border-pink-500"
+                      />
+                      <button onClick={handleWeeklyDealUpdate} className="w-full bg-pink-600 text-white p-2 rounded text-sm font-semibold hover:bg-pink-700">Update Weekly Deal</button>
+                    </div>
+                  </div>
+                )}
 
-              </div>
-
-              {/* Manage Existing Products Table */}
-              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 mt-6">
-                <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><Settings /> Manage Inventory</h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm text-left border-collapse min-w-[600px]">
-                    <thead>
-                      <tr className="bg-gray-50 border-b">
-                        <th className="p-3">Image</th>
-                        <th className="p-3">Name</th>
-                        <th className="p-3">Category</th>
-                        <th className="p-3">Sub-Category</th>
-                        <th className="p-3">Price (Ksh)</th>
-                        <th className="p-3 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {products.map(product => {
-                        const pId = product._id || product.id;
-                        const isEditing = editingId === pId;
-                        return (
-                          <tr key={pId} className="border-b hover:bg-gray-50">
-                            <td className="p-3">
-                              <img src={getImageUrl(product.image) || product.image} alt={product.name} className="w-12 h-12 object-cover rounded shadow-sm" />
-                            </td>
-                            <td className="p-3">
-                              {isEditing ? (
-                                <input type="text" value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} className="border border-pink-300 p-1.5 w-full rounded outline-none focus:ring-1 focus:ring-pink-500" />
-                              ) : product.name}
-                            </td>
-                            <td className="p-3">
-                              {isEditing ? (
-                                <select value={editForm.category} onChange={e => {
-                                  const cat = e.target.value;
-                                  const subcats = CATEGORIES[cat] || [];
-                                  setEditForm({...editForm, category: cat, subCategory: subcats[0] || ""});
-                                }} className="border border-pink-300 p-1.5 w-full rounded outline-none focus:ring-1 focus:ring-pink-500">
-                                  {Object.keys(CATEGORIES).map(c => <option key={c} value={c}>{c}</option>)}
-                                </select>
-                              ) : product.category}
-                            </td>
-                            <td className="p-3">
-                              {isEditing ? (
-                                <select value={editForm.subCategory} onChange={e => setEditForm({...editForm, subCategory: e.target.value})} className="border border-pink-300 p-1.5 w-full rounded outline-none focus:ring-1 focus:ring-pink-500">
-                                  {(CATEGORIES[editForm.category] || []).map(s => <option key={s} value={s}>{s}</option>)}
-                                </select>
-                              ) : product.subCategory}
-                            </td>
-                            <td className="p-3">
-                              {isEditing ? (
-                                <input type="number" value={editForm.price} onChange={e => setEditForm({...editForm, price: e.target.value})} className="border border-pink-300 p-1.5 w-24 rounded outline-none focus:ring-1 focus:ring-pink-500" />
-                              ) : product.price}
-                            </td>
-                            <td className="p-3 text-right space-x-3">
-                              {isEditing ? (
-                                <>
-                                  <button onClick={() => handleSaveEdit(pId)} className="text-green-600 font-bold hover:underline">Save</button>
-                                  <button onClick={() => setEditingId(null)} className="text-gray-500 font-bold hover:underline">Cancel</button>
-                                </>
-                              ) : (
-                                <>
-                                  <button onClick={() => handleStartEdit(product)} className="text-blue-500 hover:text-blue-700 transition" title="Edit Product"><Edit size={18} /></button>
-                                  <button onClick={() => handleDeleteProduct(pId)} className="text-red-500 hover:text-red-700 transition" title="Delete Product"><Trash2 size={18} /></button>
-                                </>
-                              )}
-                            </td>
+                {/* Manage Existing Products Table */}
+                {adminTab === 'inventory' && (
+                  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                    <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><Settings /> Manage Inventory</h3>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm text-left border-collapse min-w-[600px]">
+                        <thead>
+                          <tr className="bg-gray-50 border-b">
+                            <th className="p-3">Image</th>
+                            <th className="p-3">Name</th>
+                            <th className="p-3">Category</th>
+                            <th className="p-3">Sub-Category</th>
+                            <th className="p-3">Price (Ksh)</th>
+                            <th className="p-3 text-right">Actions</th>
                           </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                  {products.length === 0 && <p className="text-center text-gray-500 py-6">No products available in the catalog.</p>}
-                </div>
+                        </thead>
+                        <tbody>
+                          {products.map(product => {
+                            const pId = product._id || product.id;
+                            const isEditing = editingId === pId;
+                            return (
+                              <tr key={pId} className="border-b hover:bg-gray-50">
+                                <td className="p-3">
+                                  <img src={getImageUrl(product.image) || product.image} alt={product.name} className="w-12 h-12 object-cover rounded shadow-sm" />
+                                </td>
+                                <td className="p-3">
+                                  {isEditing ? (
+                                    <input type="text" value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} className="border border-pink-300 p-1.5 w-full rounded outline-none focus:ring-1 focus:ring-pink-500" />
+                                  ) : product.name}
+                                </td>
+                                <td className="p-3">
+                                  {isEditing ? (
+                                    <select value={editForm.category} onChange={e => {
+                                      const cat = e.target.value;
+                                      const subcats = CATEGORIES[cat] || [];
+                                      setEditForm({...editForm, category: cat, subCategory: subcats[0] || ""});
+                                    }} className="border border-pink-300 p-1.5 w-full rounded outline-none focus:ring-1 focus:ring-pink-500">
+                                      {Object.keys(CATEGORIES).map(c => <option key={c} value={c}>{c}</option>)}
+                                    </select>
+                                  ) : product.category}
+                                </td>
+                                <td className="p-3">
+                                  {isEditing ? (
+                                    <select value={editForm.subCategory} onChange={e => setEditForm({...editForm, subCategory: e.target.value})} className="border border-pink-300 p-1.5 w-full rounded outline-none focus:ring-1 focus:ring-pink-500">
+                                      {(CATEGORIES[editForm.category] || []).map(s => <option key={s} value={s}>{s}</option>)}
+                                    </select>
+                                  ) : product.subCategory}
+                                </td>
+                                <td className="p-3">
+                                  {isEditing ? (
+                                    <input type="number" value={editForm.price} onChange={e => setEditForm({...editForm, price: e.target.value})} className="border border-pink-300 p-1.5 w-24 rounded outline-none focus:ring-1 focus:ring-pink-500" />
+                                  ) : product.price}
+                                </td>
+                                <td className="p-3 text-right space-x-3">
+                                  {isEditing ? (
+                                    <>
+                                      <button onClick={() => handleSaveEdit(pId)} className="text-green-600 font-bold hover:underline">Save</button>
+                                      <button onClick={() => setEditingId(null)} className="text-gray-500 font-bold hover:underline">Cancel</button>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <button onClick={() => handleStartEdit(product)} className="text-blue-500 hover:text-blue-700 transition" title="Edit Product"><Edit size={18} /></button>
+                                      <button onClick={() => handleDeleteProduct(pId)} className="text-red-500 hover:text-red-700 transition" title="Delete Product"><Trash2 size={18} /></button>
+                                    </>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                      {products.length === 0 && <p className="text-center text-gray-500 py-6">No products available in the catalog.</p>}
+                    </div>
+                  </div>
+                )}
               </div>
-
             </div>
           ) : currentView === 'client-dashboard' && isClient ? (
             
