@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Search, ShoppingCart, User, Menu, X, MessageCircle, Upload, Plus, Package, Settings, LogOut, Trash2 } from 'lucide-react';
+import { Search, ShoppingCart, User, Menu, X, MessageCircle, Upload, Plus, Package, Settings, LogOut, Trash2, Edit } from 'lucide-react';
 
 // --- API CONFIGURATION ---
 const API_BASE_URL = 'https://nelly-best-collections-4.onrender.com';
@@ -57,6 +57,10 @@ export default function NellieBestCollections() {
   const [imagePreview, setImagePreview] = useState<string | null>(null); // Local image preview
   const [weeklyDealId, setWeeklyDealId] = useState("");
   const [weeklyGift, setWeeklyGift] = useState("");
+  
+  // Edit Product States
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({ name: "", category: "Male Clothes", subCategory: "Boxers", price: "" });
 
   // --- UI STATES ---
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -189,7 +193,7 @@ export default function NellieBestCollections() {
   // --- CART HANDLERS ---
   const addToCart = (product: any) => {
     setCart([...cart, product]);
-    setIsCartOpen(true); // Auto-open cart to show user their additions
+    // The cart icon will update, but we no longer force the cart panel to open.
   };
 
   const removeFromCart = (indexToRemove: number) => {
@@ -247,6 +251,64 @@ export default function NellieBestCollections() {
       setNewProductFile(null);
       setImagePreview(null);
       alert("Product loaded locally for current session!");
+    }
+  };
+
+  const handleStartEdit = (product: any) => {
+    setEditingId(product._id || product.id);
+    setEditForm({ 
+      name: product.name, 
+      category: product.category, 
+      subCategory: product.subCategory, 
+      price: product.price 
+    });
+  };
+
+  const handleSaveEdit = async (productId: string) => {
+    const token = localStorage.getItem('adminToken');
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/products/${productId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify(editForm)
+      });
+      if (res.ok) {
+        alert("Product updated successfully!");
+        setProducts(products.map(p => (p._id || p.id) === productId ? { ...p, ...editForm } : p));
+        setEditingId(null);
+      } else {
+        throw new Error("Backend edit failed. Utilizing local update.");
+      }
+    } catch (error) {
+      setProducts(products.map(p => (p._id || p.id) === productId ? { ...p, ...editForm } : p));
+      setEditingId(null);
+      alert("Product updated locally for current session!");
+    }
+  };
+
+  const handleDeleteProduct = async (productId: string) => {
+    if (!window.confirm("Are you sure you want to delete this product?")) return;
+    
+    const token = localStorage.getItem('adminToken');
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/products/${productId}`, {
+        method: 'DELETE',
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        }
+      });
+      if (res.ok) {
+        alert("Product deleted successfully!");
+        setProducts(products.filter(p => (p._id || p.id) !== productId));
+      } else {
+        throw new Error("Backend delete failed. Utilizing local delete.");
+      }
+    } catch (error) {
+      setProducts(products.filter(p => (p._id || p.id) !== productId));
+      alert("Product removed locally for current session!");
     }
   };
 
@@ -527,6 +589,81 @@ export default function NellieBestCollections() {
                 </div>
 
               </div>
+
+              {/* Manage Existing Products Table */}
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 mt-6">
+                <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><Settings /> Manage Inventory</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-left border-collapse min-w-[600px]">
+                    <thead>
+                      <tr className="bg-gray-50 border-b">
+                        <th className="p-3">Image</th>
+                        <th className="p-3">Name</th>
+                        <th className="p-3">Category</th>
+                        <th className="p-3">Sub-Category</th>
+                        <th className="p-3">Price (Ksh)</th>
+                        <th className="p-3 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {products.map(product => {
+                        const pId = product._id || product.id;
+                        const isEditing = editingId === pId;
+                        return (
+                          <tr key={pId} className="border-b hover:bg-gray-50">
+                            <td className="p-3">
+                              <img src={getImageUrl(product.image) || product.image} alt={product.name} className="w-12 h-12 object-cover rounded shadow-sm" />
+                            </td>
+                            <td className="p-3">
+                              {isEditing ? (
+                                <input type="text" value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} className="border border-pink-300 p-1.5 w-full rounded outline-none focus:ring-1 focus:ring-pink-500" />
+                              ) : product.name}
+                            </td>
+                            <td className="p-3">
+                              {isEditing ? (
+                                <select value={editForm.category} onChange={e => {
+                                  const cat = e.target.value;
+                                  const subcats = CATEGORIES[cat] || [];
+                                  setEditForm({...editForm, category: cat, subCategory: subcats[0] || ""});
+                                }} className="border border-pink-300 p-1.5 w-full rounded outline-none focus:ring-1 focus:ring-pink-500">
+                                  {Object.keys(CATEGORIES).map(c => <option key={c} value={c}>{c}</option>)}
+                                </select>
+                              ) : product.category}
+                            </td>
+                            <td className="p-3">
+                              {isEditing ? (
+                                <select value={editForm.subCategory} onChange={e => setEditForm({...editForm, subCategory: e.target.value})} className="border border-pink-300 p-1.5 w-full rounded outline-none focus:ring-1 focus:ring-pink-500">
+                                  {(CATEGORIES[editForm.category] || []).map(s => <option key={s} value={s}>{s}</option>)}
+                                </select>
+                              ) : product.subCategory}
+                            </td>
+                            <td className="p-3">
+                              {isEditing ? (
+                                <input type="number" value={editForm.price} onChange={e => setEditForm({...editForm, price: e.target.value})} className="border border-pink-300 p-1.5 w-24 rounded outline-none focus:ring-1 focus:ring-pink-500" />
+                              ) : product.price}
+                            </td>
+                            <td className="p-3 text-right space-x-3">
+                              {isEditing ? (
+                                <>
+                                  <button onClick={() => handleSaveEdit(pId)} className="text-green-600 font-bold hover:underline">Save</button>
+                                  <button onClick={() => setEditingId(null)} className="text-gray-500 font-bold hover:underline">Cancel</button>
+                                </>
+                              ) : (
+                                <>
+                                  <button onClick={() => handleStartEdit(product)} className="text-blue-500 hover:text-blue-700 transition" title="Edit Product"><Edit size={18} /></button>
+                                  <button onClick={() => handleDeleteProduct(pId)} className="text-red-500 hover:text-red-700 transition" title="Delete Product"><Trash2 size={18} /></button>
+                                </>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  {products.length === 0 && <p className="text-center text-gray-500 py-6">No products available in the catalog.</p>}
+                </div>
+              </div>
+
             </div>
           ) : currentView === 'client-dashboard' && isClient ? (
             
