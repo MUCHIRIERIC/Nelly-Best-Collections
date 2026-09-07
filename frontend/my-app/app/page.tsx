@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Search, ShoppingCart, User, Menu, X, MessageCircle, Upload, Plus, Package, Settings, LogOut } from 'lucide-react';
+import { Search, ShoppingCart, User, Menu, X, MessageCircle, Upload, Plus, Package, Settings, LogOut, Trash2 } from 'lucide-react';
 
 // --- API CONFIGURATION ---
 const API_BASE_URL = 'https://nelly-best-collections-4.onrender.com';
@@ -21,16 +21,18 @@ const FALLBACK_PRODUCTS = [
   { id: "fallback-4", name: "Push-up Bra", category: "Female Clothes", subCategory: "Bra's", price: 750, image: "https://images.unsplash.com/photo-1588661601050-058b888da87c?w=400&q=80" },
 ];
 
-// Helper to format image URLs from the backend
+// Helper to format image URLs from the backend or local object URLs
 const getImageUrl = (url: string) => {
   if (!url) return "";
+  if (url.startsWith('blob:')) return url; // Allow local PC images
   return url.startsWith('/uploads') ? `${API_BASE_URL}${url}` : url;
 };
 
-export default function NellyBestCollections() {
+export default function NellieBestCollections() {
   // --- STATE MANAGEMENT ---
   const [products, setProducts] = useState<any[]>([]);
   const [cart, setCart] = useState<any[]>([]);
+  const [isCartOpen, setIsCartOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [displayCount, setDisplayCount] = useState(8);
@@ -38,25 +40,38 @@ export default function NellyBestCollections() {
   
   // --- AUTH STATE ---
   const [showLogin, setShowLogin] = useState(false);
+  const [authTab, setAuthTab] = useState<'client' | 'admin'>('client');
+  const [isSignUp, setIsSignUp] = useState(false);
+  
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isClient, setIsClient] = useState(false);
+  const [clientName, setClientName] = useState("");
+  
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  
+  const [clientNameInput, setClientNameInput] = useState("");
+
   // --- ADMIN FORM STATES ---
   const [newProduct, setNewProduct] = useState({ name: "", price: "", category: "Male Clothes", subCategory: "Boxers" });
   const [newProductFile, setNewProductFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null); // Local image preview
   const [weeklyDealId, setWeeklyDealId] = useState("");
   const [weeklyGift, setWeeklyGift] = useState("");
 
   // --- UI STATES ---
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [currentSlide, setCurrentSlide] = useState(0);
+  const [currentView, setCurrentView] = useState<'catalog' | 'client-dashboard'>('catalog');
 
   // --- INITIALIZATION (Fetch data & check auth) ---
   useEffect(() => {
-    const token = localStorage.getItem('adminToken');
-    if (token) {
-      setIsAdmin(true);
+    const adminToken = localStorage.getItem('adminToken');
+    if (adminToken) setIsAdmin(true);
+
+    const clientToken = localStorage.getItem('clientToken');
+    if (clientToken) {
+      setIsClient(true);
+      setClientName(localStorage.getItem('clientName') || "Client");
     }
 
     const fetchProducts = async () => {
@@ -122,34 +137,71 @@ export default function NellyBestCollections() {
   // --- AUTH HANDLERS ---
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setIsAdmin(true);
-        setShowLogin(false);
-        localStorage.setItem('adminToken', data.token);
-        setEmail("");
-        setPassword("");
-      } else {
-        alert(data.message || "Invalid credentials");
+    
+    if (authTab === 'admin') {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          setIsAdmin(true);
+          setShowLogin(false);
+          localStorage.setItem('adminToken', data.token);
+          setEmail("");
+          setPassword("");
+        } else {
+          alert(data.message || "Invalid Admin credentials");
+        }
+      } catch (error) {
+        alert("Error connecting to server. Cannot authenticate admin.");
       }
-    } catch (error) {
-      alert("Error connecting to server");
+    } else {
+      // Mock Client Login / Sign Up Process
+      setIsClient(true);
+      const displayName = clientNameInput || email.split('@')[0];
+      setClientName(displayName);
+      setShowLogin(false);
+      localStorage.setItem('clientToken', 'mock-client-token');
+      localStorage.setItem('clientName', displayName);
+      setCurrentView('client-dashboard');
+      setEmail("");
+      setPassword("");
+      setClientNameInput("");
     }
   };
 
   const handleLogout = () => {
-    setIsAdmin(false);
-    localStorage.removeItem('adminToken');
+    if (isAdmin) {
+      setIsAdmin(false);
+      localStorage.removeItem('adminToken');
+    }
+    if (isClient) {
+      setIsClient(false);
+      localStorage.removeItem('clientToken');
+      localStorage.removeItem('clientName');
+      setCurrentView('catalog');
+    }
   };
 
+  // --- CART HANDLERS ---
   const addToCart = (product: any) => {
     setCart([...cart, product]);
+    setIsCartOpen(true); // Auto-open cart to show user their additions
+  };
+
+  const removeFromCart = (indexToRemove: number) => {
+    setCart(cart.filter((_, index) => index !== indexToRemove));
+  };
+
+  const cartTotal = cart.reduce((sum, item) => sum + Number(item.price), 0);
+
+  const handleWhatsAppCheckout = () => {
+    if (cart.length === 0) return;
+    const message = `Hello Nellie Best Collections! I would like to order:\n\n${cart.map((item, i) => `${i+1}. ${item.name} - Ksh ${item.price}`).join('\n')}\n\n*Total Items:* ${cart.length}\n*Total Price:* Ksh ${cartTotal}\n\nPlease guide me on the payment and delivery.`;
+    window.open(`https://wa.me/254768450250?text=${encodeURIComponent(message)}`, '_blank');
   };
 
   // --- ADMIN ACTIONS ---
@@ -177,14 +229,24 @@ export default function NellyBestCollections() {
         alert("Product added successfully!");
         setNewProduct({ name: "", price: "", category: "Male Clothes", subCategory: "Boxers" });
         setNewProductFile(null);
+        setImagePreview(null);
         const updated = await fetch(`${API_BASE_URL}/api/products`).then(r => r.json());
         setProducts(updated);
       } else {
-        const err = await res.json();
-        alert(err.message || "Failed to add product");
+        throw new Error("Backend save failed. Utilizing local image.");
       }
     } catch (error) {
-      alert("Error adding product");
+      // Fallback: Add locally if backend fails, allowing local PC images to work instantly
+      const newMockProduct = {
+        id: `local-${Date.now()}`,
+        ...newProduct,
+        image: imagePreview || "" // Use local Blob URL
+      };
+      setProducts([newMockProduct, ...products]);
+      setNewProduct({ name: "", price: "", category: "Male Clothes", subCategory: "Boxers" });
+      setNewProductFile(null);
+      setImagePreview(null);
+      alert("Product loaded locally for current session!");
     }
   };
 
@@ -237,15 +299,15 @@ export default function NellyBestCollections() {
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 font-sans">
       {/* HEADER */}
-      <header className="sticky top-0 z-50 bg-white shadow-md">
+      <header className="sticky top-0 z-40 bg-white shadow-md">
         <div className="max-w-7xl mx-auto px-4 h-20 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button className="lg:hidden" onClick={() => setIsMobileMenuOpen(true)}>
               <Menu size={28} />
             </button>
-            <div className="flex flex-col">
+            <div className="flex flex-col cursor-pointer" onClick={() => setCurrentView('catalog')}>
               <h1 className="text-2xl md:text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-purple-600 via-pink-500 to-orange-500 animate-[pulse_3s_ease-in-out_infinite]">
-                Nelly Best Collections
+                Nellie Best Collections
               </h1>
               {isAdmin ? (
                 <div className="flex items-center gap-2 mt-1">
@@ -275,22 +337,35 @@ export default function NellyBestCollections() {
           </div>
 
           <div className="flex items-center gap-4 md:gap-6">
-            <a href="#catalog" className="hidden md:block font-medium hover:text-pink-600 transition">Catalog</a>
+            {!isAdmin && (
+              <button onClick={() => setCurrentView('catalog')} className="hidden md:block font-medium hover:text-pink-600 transition">Catalog</button>
+            )}
             <a href="#footer" className="hidden md:block font-medium hover:text-pink-600 transition">Contact</a>
             
-            <div className="relative cursor-pointer hover:text-pink-600">
-              <ShoppingCart size={24} />
-              {cart.length > 0 && (
-                <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
-                  {cart.length}
-                </span>
-              )}
-            </div>
+            {!isAdmin && (
+              <div className="relative cursor-pointer hover:text-pink-600" onClick={() => setIsCartOpen(true)}>
+                <ShoppingCart size={24} />
+                {cart.length > 0 && (
+                  <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                    {cart.length}
+                  </span>
+                )}
+              </div>
+            )}
 
             {isAdmin ? (
-              <button onClick={handleLogout} className="flex items-center gap-2 text-red-600 font-medium">
-                <LogOut size={20} /> <span className="hidden md:block">Logout</span>
+              <button onClick={handleLogout} className="flex items-center gap-2 text-red-600 font-medium bg-red-50 px-4 py-2 rounded-full hover:bg-red-100 transition">
+                <LogOut size={20} /> <span className="hidden md:block">Exit Admin</span>
               </button>
+            ) : isClient ? (
+              <div className="flex items-center gap-4">
+                <button onClick={() => setCurrentView('client-dashboard')} className="flex items-center gap-2 text-pink-600 font-medium hover:text-pink-800 transition">
+                  <User size={20} /> <span className="hidden md:block">Hi, {clientName}</span>
+                </button>
+                <button onClick={handleLogout} className="text-gray-500 hover:text-red-500" title="Logout">
+                  <LogOut size={20} />
+                </button>
+              </div>
             ) : (
               <button onClick={() => setShowLogin(true)} className="flex items-center gap-2 bg-pink-600 text-white px-4 py-2 rounded-full hover:bg-pink-700 transition">
                 <User size={20} /> <span className="hidden md:block">Login / Sign Up</span>
@@ -316,45 +391,47 @@ export default function NellyBestCollections() {
 
       <div className="max-w-7xl mx-auto flex flex-col lg:flex-row relative">
         {/* LEFT NAVIGATION BAR */}
-        <aside className={`${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0 fixed lg:static top-0 left-0 h-full w-64 bg-white shadow-xl lg:shadow-none lg:border-r z-40 transition-transform duration-300 ease-in-out`}>
-          <div className="p-4 flex justify-between items-center lg:hidden border-b">
-            <span className="font-bold text-lg">Categories</span>
-            <button onClick={() => setIsMobileMenuOpen(false)}><X size={24} /></button>
-          </div>
-          <div className="p-4 overflow-y-auto h-full pb-24">
-            <button 
-              onClick={() => {setSelectedCategory("All"); setIsMobileMenuOpen(false);}}
-              className={`w-full text-left py-2 px-3 rounded-lg font-medium mb-2 ${selectedCategory === "All" ? "bg-pink-100 text-pink-700" : "hover:bg-gray-100"}`}
-            >
-              All Products
-            </button>
-            
-            {Object.entries(CATEGORIES).map(([cat, subcats]) => (
-              <div key={cat} className="mb-4">
-                <button 
-                  onClick={() => setSelectedCategory(cat)}
-                  className={`w-full text-left py-2 px-3 rounded-lg font-bold ${selectedCategory === cat ? "bg-pink-100 text-pink-700" : "hover:bg-gray-100"}`}
-                >
-                  {cat}
-                </button>
-                <div className="ml-4 mt-1 space-y-1">
-                  {subcats.map(sub => (
-                    <button 
-                      key={sub}
-                      onClick={() => {setSelectedCategory(sub); setIsMobileMenuOpen(false);}}
-                      className={`block w-full text-left py-1.5 px-3 text-sm rounded-md ${selectedCategory === sub ? "text-pink-600 bg-pink-50" : "text-gray-600 hover:text-pink-600 hover:bg-gray-50"}`}
-                    >
-                      {sub}
-                    </button>
-                  ))}
+        {!isAdmin && currentView === 'catalog' && (
+          <aside className={`${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0 fixed lg:static top-0 left-0 h-full w-64 bg-white shadow-xl lg:shadow-none lg:border-r z-40 transition-transform duration-300 ease-in-out`}>
+            <div className="p-4 flex justify-between items-center lg:hidden border-b">
+              <span className="font-bold text-lg">Categories</span>
+              <button onClick={() => setIsMobileMenuOpen(false)}><X size={24} /></button>
+            </div>
+            <div className="p-4 overflow-y-auto h-full pb-24">
+              <button 
+                onClick={() => {setSelectedCategory("All"); setIsMobileMenuOpen(false);}}
+                className={`w-full text-left py-2 px-3 rounded-lg font-medium mb-2 ${selectedCategory === "All" ? "bg-pink-100 text-pink-700" : "hover:bg-gray-100"}`}
+              >
+                All Products
+              </button>
+              
+              {Object.entries(CATEGORIES).map(([cat, subcats]) => (
+                <div key={cat} className="mb-4">
+                  <button 
+                    onClick={() => setSelectedCategory(cat)}
+                    className={`w-full text-left py-2 px-3 rounded-lg font-bold ${selectedCategory === cat ? "bg-pink-100 text-pink-700" : "hover:bg-gray-100"}`}
+                  >
+                    {cat}
+                  </button>
+                  <div className="ml-4 mt-1 space-y-1">
+                    {subcats.map(sub => (
+                      <button 
+                        key={sub}
+                        onClick={() => {setSelectedCategory(sub); setIsMobileMenuOpen(false);}}
+                        className={`block w-full text-left py-1.5 px-3 text-sm rounded-md ${selectedCategory === sub ? "text-pink-600 bg-pink-50" : "text-gray-600 hover:text-pink-600 hover:bg-gray-50"}`}
+                      >
+                        {sub}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        </aside>
+              ))}
+            </div>
+          </aside>
+        )}
 
         {/* MAIN CONTENT AREA */}
-        <main className="flex-1 w-full lg:w-[calc(100%-16rem)]">
+        <main className={`flex-1 w-full ${!isAdmin && currentView === 'catalog' ? 'lg:w-[calc(100%-16rem)]' : ''}`}>
           {isAdmin ? (
             <div className="p-6 bg-pink-50 min-h-screen">
               <h2 className="text-2xl font-bold mb-6 flex items-center gap-2"><Settings /> Admin Dashboard</h2>
@@ -399,12 +476,25 @@ export default function NellyBestCollections() {
                       {(CATEGORIES[newProduct.category] || []).map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Product Image</label>
+                      <label className="block text-xs text-gray-500 mb-1">Upload Product Image (Local or Server)</label>
                       <input 
                         type="file" 
-                        onChange={(e) => e.target.files && setNewProductFile(e.target.files[0])}
+                        accept="image/*"
+                        onChange={(e) => {
+                          if (e.target.files && e.target.files[0]) {
+                            const file = e.target.files[0];
+                            setNewProductFile(file);
+                            setImagePreview(URL.createObjectURL(file)); // Generate local preview
+                          }
+                        }}
                         className="w-full text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-pink-50 file:text-pink-700 hover:file:bg-pink-100"
                       />
+                      {imagePreview && (
+                        <div className="mt-2 text-center">
+                          <span className="text-[10px] text-gray-400 block mb-1">Image Preview</span>
+                          <img src={imagePreview} alt="Preview" className="h-24 mx-auto object-contain rounded border shadow-sm" />
+                        </div>
+                      )}
                     </div>
                     <button type="submit" className="w-full bg-pink-600 text-white p-2 rounded text-sm font-semibold hover:bg-pink-700">Save Item</button>
                   </form>
@@ -413,7 +503,7 @@ export default function NellyBestCollections() {
                 {/* Recent Orders */}
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
                   <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><Package /> Recent Orders</h3>
-                  <p className="text-gray-500 text-sm">Orders are managed via direct WhatsApp checkout.</p>
+                  <p className="text-gray-500 text-sm">Orders are securely managed via direct WhatsApp checkout. The client dashboard only contains client-facing features.</p>
                 </div>
 
                 {/* Item of the Week Admin */}
@@ -438,6 +528,43 @@ export default function NellyBestCollections() {
 
               </div>
             </div>
+          ) : currentView === 'client-dashboard' && isClient ? (
+            
+            /* CLIENT DASHBOARD VIEW */
+            <div className="p-6 lg:p-12 min-h-screen bg-gray-50">
+              <div className="max-w-4xl mx-auto">
+                <h2 className="text-3xl font-bold mb-8 flex items-center gap-3">
+                  <User size={32} className="text-pink-600" /> My Client Dashboard
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  {/* Profile Settings */}
+                  <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
+                    <h3 className="font-bold text-xl mb-4 border-b pb-2">Account Overview</h3>
+                    <div className="space-y-3 text-gray-700">
+                      <p><strong className="text-gray-900">Name:</strong> {clientName}</p>
+                      <p><strong className="text-gray-900">Account Status:</strong> <span className="text-green-600 font-semibold">Active</span></p>
+                      <p><strong className="text-gray-900">Member Since:</strong> {new Date().toLocaleDateString()}</p>
+                    </div>
+                    <button onClick={handleLogout} className="mt-8 border border-red-500 text-red-500 px-6 py-2 rounded-lg hover:bg-red-50 transition w-full md:w-auto">
+                      Log Out
+                    </button>
+                  </div>
+
+                  {/* Order History */}
+                  <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
+                    <h3 className="font-bold text-xl mb-4 border-b pb-2">Order History</h3>
+                    <div className="flex flex-col items-center justify-center py-8 text-center">
+                      <Package size={48} className="text-gray-300 mb-4" />
+                      <p className="text-gray-500 mb-6">You haven't placed any orders yet. Once you order via WhatsApp, we'll confirm it.</p>
+                      <button onClick={() => setCurrentView('catalog')} className="bg-pink-600 text-white px-6 py-2 rounded-lg hover:bg-pink-700 transition">
+                        Browse Catalog
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
           ) : (
             <>
               {/* HERO & SLIDESHOW SECTION */}
@@ -466,8 +593,8 @@ export default function NellyBestCollections() {
                     <h3 className="font-bold text-xl mb-1">{weeklyDealProduct.name}</h3>
                     <p className="text-pink-600 font-bold text-lg mb-2">Ksh {weeklyDealProduct.price}</p>
                     <p className="text-sm text-gray-500">{weeklyDealProduct.weeklyGiftDescription || "Buy this today and get a free special gift!"}</p>
-                    <button onClick={() => addToCart(weeklyDealProduct)} className="mt-4 w-full bg-black text-white py-2 rounded-lg hover:bg-gray-800 transition">
-                      Add to Cart
+                    <button onClick={() => addToCart(weeklyDealProduct)} className="mt-4 w-full bg-black text-white py-2 rounded-lg hover:bg-gray-800 transition flex justify-center items-center gap-2">
+                      <ShoppingCart size={18} /> Add to Cart
                     </button>
                   </div>
                 </div>
@@ -522,27 +649,85 @@ export default function NellyBestCollections() {
         </main>
       </div>
 
+      {/* FLOATING CART PANEL */}
+      {isCartOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex justify-end">
+          <div className="bg-white w-full max-w-md h-full shadow-2xl p-6 relative flex flex-col animate-[slideIn_0.3s_ease-out]">
+            <button onClick={() => setIsCartOpen(false)} className="absolute top-4 right-4 text-gray-400 hover:text-black">
+              <X size={28} />
+            </button>
+            <h2 className="text-2xl font-bold mb-6 flex items-center gap-2 border-b pb-4">
+              <ShoppingCart /> Your Cart
+            </h2>
+            
+            <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+              {cart.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-gray-500">
+                  <ShoppingCart size={48} className="mb-4 opacity-50" />
+                  <p>Your cart is empty.</p>
+                  <button onClick={() => setIsCartOpen(false)} className="mt-4 text-pink-600 font-semibold underline">Continue Shopping</button>
+                </div>
+              ) : (
+                cart.map((item, index) => (
+                  <div key={index} className="flex gap-4 items-center bg-gray-50 p-3 rounded-lg border border-gray-100">
+                    <img src={getImageUrl(item.image) || item.image} alt={item.name} className="w-16 h-16 object-cover rounded shadow-sm" />
+                    <div className="flex-1">
+                      <h4 className="font-semibold text-gray-800 text-sm">{item.name}</h4>
+                      <p className="text-pink-600 font-bold text-sm mt-1">Ksh {item.price}</p>
+                    </div>
+                    <button onClick={() => removeFromCart(index)} className="text-red-400 hover:text-red-600 p-2" title="Remove Item">
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {cart.length > 0 && (
+              <div className="mt-6 pt-6 border-t bg-white">
+                <div className="flex justify-between font-bold text-lg mb-2 text-gray-800">
+                  <span>Total Items:</span>
+                  <span>{cart.length}</span>
+                </div>
+                <div className="flex justify-between font-extrabold text-xl mb-6">
+                  <span>Total Price:</span>
+                  <span className="text-pink-600">Ksh {cartTotal}</span>
+                </div>
+                <button 
+                  onClick={handleWhatsAppCheckout}
+                  className="w-full bg-green-500 text-white py-3 rounded-lg font-bold hover:bg-green-600 transition shadow-lg flex justify-center items-center gap-2"
+                >
+                  <MessageCircle size={22} /> Checkout via WhatsApp
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* WHATSAPP FLOATING BUTTON */}
-      <a 
-        href="https://wa.me/254768450250" 
-        target="_blank" 
-        rel="noreferrer"
-        className="fixed bottom-6 right-6 bg-green-500 text-white p-4 rounded-full shadow-[0_4px_14px_rgba(34,197,94,0.5)] hover:scale-110 transition-transform z-50 flex items-center justify-center"
-      >
-        <MessageCircle size={32} />
-      </a>
+      {!isCartOpen && (
+        <a 
+          href="https://wa.me/254768450250" 
+          target="_blank" 
+          rel="noreferrer"
+          className="fixed bottom-6 right-6 bg-green-500 text-white p-4 rounded-full shadow-[0_4px_14px_rgba(34,197,94,0.5)] hover:scale-110 transition-transform z-40 flex items-center justify-center"
+        >
+          <MessageCircle size={32} />
+        </a>
+      )}
 
       {/* FOOTER */}
       <footer id="footer" className="bg-gray-900 text-gray-300 pt-12 pb-6 mt-12 border-t-4 border-pink-600">
         <div className="max-w-7xl mx-auto px-4 grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
           <div>
-            <h3 className="text-white text-xl font-bold mb-4">Nelly Best Collections</h3>
+            <h3 className="text-white text-xl font-bold mb-4">Nellie Best Collections</h3>
             <p className="text-sm mb-4">Your one-stop shop for high-quality, fashionable clothing for men, women, and kids. Fast delivery and excellent customer service.</p>
           </div>
           <div>
             <h3 className="text-white text-lg font-bold mb-4">Quick Links</h3>
             <ul className="space-y-2 text-sm">
-              <li><a href="#" className="hover:text-pink-400">Home</a></li>
+              <li><button onClick={() => setCurrentView('catalog')} className="hover:text-pink-400">Home</button></li>
               <li><a href="#catalog" className="hover:text-pink-400">Shop Catalog</a></li>
               <li><a href="#" className="hover:text-pink-400">About Us</a></li>
               <li><a href="#" className="hover:text-pink-400">Return Policy</a></li>
@@ -558,48 +743,103 @@ export default function NellyBestCollections() {
           </div>
         </div>
         <div className="text-center text-sm border-t border-gray-800 pt-6">
-          &copy; {new Date().getFullYear()} Nelly Best Collections. All rights reserved.
+          &copy; {new Date().getFullYear()} Nellie Best Collections. All rights reserved.
         </div>
       </footer>
 
-      {/* LOGIN MODAL */}
+      {/* AUTHENTICATION MODAL (CLIENT & ADMIN SEPARATED) */}
       {showLogin && (
         <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md p-6 relative shadow-2xl">
-            <button onClick={() => setShowLogin(false)} className="absolute top-4 right-4 text-gray-400 hover:text-black">
+          <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden relative shadow-2xl">
+            <button onClick={() => setShowLogin(false)} className="absolute top-4 right-4 text-gray-400 hover:text-black z-10">
               <X size={24} />
             </button>
-            <h2 className="text-2xl font-bold text-center mb-6">Welcome Back</h2>
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email / Username</label>
-                <input 
-                  type="email" 
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-pink-500 outline-none"
-                  placeholder="Enter email"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-                <input 
-                  type="password" 
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-pink-500 outline-none"
-                  placeholder="Enter password"
-                  required
-                />
-              </div>
-              <button type="submit" className="w-full bg-pink-600 text-white py-2 rounded-lg font-semibold hover:bg-pink-700 transition">
-                Login
+            
+            {/* Auth Tabs */}
+            <div className="flex border-b text-center font-semibold bg-gray-50">
+              <button 
+                onClick={() => setAuthTab('client')} 
+                className={`flex-1 py-4 transition-colors ${authTab === 'client' ? 'text-pink-600 bg-white border-b-2 border-pink-600' : 'text-gray-500 hover:bg-gray-100'}`}
+              >
+                Client Zone
               </button>
-            </form>
+              <button 
+                onClick={() => setAuthTab('admin')} 
+                className={`flex-1 py-4 transition-colors ${authTab === 'admin' ? 'text-pink-600 bg-white border-b-2 border-pink-600' : 'text-gray-500 hover:bg-gray-100'}`}
+              >
+                Admin Access
+              </button>
+            </div>
+
+            <div className="p-6">
+              <h2 className="text-2xl font-bold text-center mb-6">
+                {authTab === 'admin' ? 'Admin Gateway' : isSignUp ? 'Create an Account' : 'Welcome Back'}
+              </h2>
+              
+              <form onSubmit={handleLogin} className="space-y-4">
+                {authTab === 'client' && isSignUp && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+                    <input 
+                      type="text" 
+                      value={clientNameInput}
+                      onChange={(e) => setClientNameInput(e.target.value)}
+                      className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-pink-500 outline-none bg-gray-50"
+                      placeholder="Enter your name"
+                      required
+                    />
+                  </div>
+                )}
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
+                  <input 
+                    type="email" 
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-pink-500 outline-none bg-gray-50"
+                    placeholder="you@example.com"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                  <input 
+                    type="password" 
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-pink-500 outline-none bg-gray-50"
+                    placeholder="Enter password"
+                    required
+                  />
+                </div>
+                <button type="submit" className="w-full bg-pink-600 text-white py-2 rounded-lg font-semibold hover:bg-pink-700 transition mt-2 shadow-md">
+                  {authTab === 'admin' ? 'Access Dashboard' : isSignUp ? 'Sign Up & Continue' : 'Login'}
+                </button>
+              </form>
+
+              {authTab === 'client' && (
+                <div className="mt-4 text-center text-sm">
+                  <span className="text-gray-600">
+                    {isSignUp ? "Already have an account?" : "Don't have an account?"}
+                  </span>
+                  <button onClick={() => setIsSignUp(!isSignUp)} className="ml-1 text-pink-600 font-bold hover:underline">
+                    {isSignUp ? "Login here" : "Sign up"}
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
+
+      {/* Global CSS for Animations */}
+      <style dangerouslySetInnerHTML={{__html: `
+        @keyframes slideIn {
+          from { transform: translateX(100%); }
+          to { transform: translateX(0); }
+        }
+      `}} />
     </div>
   );
 }
