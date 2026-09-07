@@ -3,9 +3,6 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
 require('dotenv').config();
 
 const app = express();
@@ -14,29 +11,6 @@ const PORT = process.env.PORT || 5000;
 // Middleware
 app.use(cors());
 app.use(express.json());
-
-// --- LOCAL STORAGE CONFIGURATION ---
-// 1. Ensure the uploads directory exists
-const uploadDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, { recursive: true });
-}
-
-// 2. Serve the uploads directory statically so the frontend can view the images
-app.use('/uploads', express.static(uploadDir));
-
-// 3. Configure Multer to save files locally
-const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        cb(null, 'uploads/');
-    },
-    filename: function (req, file, cb) {
-        // Creates a unique filename (e.g., 1675203940123-image.jpg)
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, uniqueSuffix + path.extname(file.originalname)); 
-    }
-});
-const upload = multer({ storage: storage });
 
 // --- MONGODB CONNECTION ---
 mongoose.connect(process.env.MONGO_URI)
@@ -158,17 +132,14 @@ app.get('/api/products', async (req, res) => {
     }
 });
 
-// 4. Add New Product (Admin Only, Local Upload)
-app.post('/api/products', protect, upload.single('image'), async (req, res) => {
+// 4. Add New Product (Admin Only, Image URL)
+app.post('/api/products', protect, async (req, res) => {
     try {
         if (!req.user.isAdmin) return res.status(403).json({ message: 'Admin access required' });
 
-        const { name, category, subCategory, price } = req.body;
-        
-        // Construct the local URL to the saved file
-        const imageUrl = req.file ? `/uploads/${req.file.filename}` : req.body.image;
+        const { name, category, subCategory, price, image } = req.body;
 
-        const product = new Product({ name, category, subCategory, price, image: imageUrl });
+        const product = new Product({ name, category, subCategory, price, image });
         const savedProduct = await product.save();
         res.status(201).json(savedProduct);
     } catch (error) {
